@@ -1,0 +1,145 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using TMPro;
+
+public class HackerTyper : Monobehaviour
+{
+
+    [SerializeField] private TextMeshPro textMeshPro;
+
+    [SerializeField] public int charactersPerInput; // Number of characters taken from the dictionary per input -- speed, essentially
+    [SerializeField] public int maximumCharacters; // Start deleting characters when our TMP is longer than this
+    [SerializeField] public TextAsset hackingDictionary; // The text file, imported into Unity
+
+    private string dictionaryText; // <- initialize to hackingDictionary.text in Start()
+    private int dictionaryIndex; //Keeps track of our place in the string
+
+    //Use the publisher-subscriber pattern to add to our TMP when the player types
+    private void OnEnable() {
+        PlayerManager.typedInput += ProcessTypedInput;
+    }
+    private void OnDisable() {
+        PlayerManager.typedInput -= ProcessTypedInput;
+    }
+
+    private void Start() {
+        //Cache reference
+        textMeshPro = GetComponentInChildren<TextMeshPro>();
+
+        //Initialize our textMeshPro's text to ""
+        textMeshPro.text = "";
+
+        dictionaryText = CodeStylizer.ApplyColorTags(hackingDictionary.text);
+
+        //Initialize dictionary index
+        dictionaryIndex = Random.Range(0, dictionaryText.Length);
+    }
+
+    private void ProcessTypedInput(char input) {
+        // Not shown here: a couple of logic-checks specific to my solution
+
+        //Add our code-jargon from the dictionary
+        textMeshPro.text += GetHackingString(); 
+
+        //Make sure the TMP doesn't get too long!
+        if (textMeshPro.text.Length > maximumCharacters) {
+            textMeshPro.text = textMeshPro.text.Remove(0, charactersPerInput); 
+        }
+    }
+
+    public string GetHackingString() {
+        if (dictionaryIndex + charactersPerInput >= dictionaryText.Length) {
+            var end = dictionaryText.Substring(dictionaryIndex);
+            dictionaryIndex = 0;
+            return end;
+        }
+
+        var str = dictionaryText.Substring(dictionaryIndex, charactersPerInput);
+        dictionaryIndex += charactersPerInput;
+        return str;
+    }
+
+    private static string[] purpleKeywords = { //for, while, if, etc...};
+    private static string[] blueKeywords = { //private, public, static, string, int, etc...};
+
+    //This method is slow and inefficient. Luckily, we only have to do it once! Let me know if you can think of a better way to do it.
+    public static string ApplyColorTags(string untaggedString) {
+        //You can initialize the following hex strings to whatever you'd like!
+        string endColorTag = "</color>";
+        string purpleTag = "<color=" + purpleHex + ">";
+        string blueTag = "<color=" + blueHex + ">";
+        string greenTag = "<color=" + greenHex + ">";
+        string orangeTag = "<color=" + orangeHex + ">";
+
+
+        List<string> classNames = new List<string>();
+        List<string> methodNames = new List<string>();
+
+        bool parsingName = false; //This tells us whether we're in the middle of a name or looking for the start of a new name
+        int substringStart = 0;
+
+        var charArray = untaggedString.ToCharArray();
+        for (int i = 0; i < charArray.Length; i++) {
+            int previous = Mathf.Max(0, i - 1);
+            int next = Mathf.Min(charArray.Length - 1, i + 1);
+
+            //Find all uppercase letters
+            if (!parsingName && char.IsUpper(charArray[i]) && (!char.IsLetterOrDigit(charArray[previous]) || i == 0)) {
+                parsingName = true;
+                substringStart = i;
+            }
+            //Add to classNames if a white space, period, etc. follows
+            else if (parsingName && char.IsWhiteSpace(charArray[i]) || charArray[i] == '.' || charArray[i] == ';' || charArray[i] == '<' || charArray[i] == '>') {
+                parsingName = false;
+                classNames.Add(untaggedString.Substring(substringStart, i - substringStart));
+            }
+            //Add to methodNames if an open parenthese follows
+            else if (parsingName && charArray[i] == '(') {
+                parsingName = false;
+                methodNames.Add(untaggedString.Substring(substringStart, i - substringStart));
+            }
+
+        }
+
+        //Color the method names orange
+        foreach (string methodName in methodNames.Distinct()) {
+            if (methodName == null || methodName == "") {
+                continue;
+            }
+            untaggedString = untaggedString.Replace(methodName, orangeTag + methodName + endColorTag);
+        }
+        //Color the class names green
+        foreach (string className in classNames.Distinct()) {
+            if (className == null || className == "") {
+                continue;
+            }
+            untaggedString = untaggedString.Replace(className, greenTag + className + endColorTag);
+        }
+
+        //Color the purple and blue keywords appropraitely -- they're frequently surrounded by
+        //extraneous characters, however. So we'll need to account for that while looking for them.
+        var commonExtras = new char[] { '}', '{', '(', ')', '\t', '\n', ' ', '.', ';', ',' };
+        foreach (string purpleKeyword in purpleKeywords) {
+            foreach (string variant in CommonVariants(purpleKeyword.Trim())) {
+                untaggedString = untaggedString.Replace(variant, variant.Replace(variant.Trim(commonExtras), purpleTag + variant.Trim(commonExtras) + endColorTag));
+            }
+        }
+        foreach (string blueKeyword in blueKeywords) {
+            foreach (string variant in CommonVariants(blueKeyword.Trim())) {
+                untaggedString = untaggedString.Replace(variant, variant.Replace(variant.Trim(commonExtras), blueTag + variant.Trim(commonExtras) + endColorTag));
+            }
+        }
+
+        return untaggedString;
+    }
+
+
+    #region Helper Methods
+    /// <summary>
+    /// Returns an array containing many possible combinations of leading and trailing extraneous characters around the trimmed argument.
+    /// </summary>
+    /// <param name="trimmed"> The string with no white space that might be found in a larger string</param>
+    /// <returns></returns>
+    private static string[] CommonVariants(string trimmed) { ...}
+}
